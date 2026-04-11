@@ -11,6 +11,7 @@ import {
 import { vectorSearch } from "./embeddings";
 import { chat } from "./claude";
 import { transcribeVoice } from "./transcribe";
+import { applyTaskUpdates, getTasksForDate, formatTasks, formatSummary } from "./planner";
 
 const ALLOWED_USERS = (process.env.ALLOWED_TELEGRAM_IDS ?? "")
   .split(",")
@@ -40,9 +41,12 @@ export function createBot(token: string): Telegraf {
       "Hey! I'm Valera, your AI assistant with persistent memory.\n\n" +
         "Just chat with me normally. I'll remember important things in my wiki.\n\n" +
         "Commands:\n" +
-        "/memory - show current session context\n" +
-        "/forget - clear session context\n" +
-        "/wiki <query> - search wiki pages"
+        "/today - tasks for today\n" +
+        "/tomorrow - tasks for tomorrow\n" +
+        "/summary - end of day summary\n" +
+        "/memory - session context\n" +
+        "/forget - clear session\n" +
+        "/wiki <query> - search wiki"
     );
   });
 
@@ -55,6 +59,27 @@ export function createBot(token: string): Telegraf {
   bot.command("forget", async (ctx) => {
     await clearHot();
     ctx.reply("Session context cleared.");
+  });
+
+  bot.command("today", async (ctx) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const tasks = await getTasksForDate("today");
+    await ctx.reply(formatTasks(tasks, today));
+  });
+
+  bot.command("tomorrow", async (ctx) => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const tomorrow = d.toISOString().slice(0, 10);
+    const tasks = await getTasksForDate("tomorrow");
+    await ctx.reply(formatTasks(tasks, tomorrow));
+  });
+
+  bot.command("summary", async (ctx) => {
+    const dateArg = ctx.message.text.replace(/^\/summary\s*/, "").trim();
+    const date = dateArg || new Date().toISOString().slice(0, 10);
+    const tasks = await getTasksForDate(dateArg || "today");
+    await ctx.reply(formatSummary(tasks, date));
   });
 
   bot.command("wiki", async (ctx) => {
@@ -142,6 +167,11 @@ export function createBot(token: string): Telegraf {
       if (response.wikiUpdates.length > 0) {
         await applyWikiUpdates(response.wikiUpdates);
         console.log(`Wiki updated: ${response.wikiUpdates.map((u) => u.path).join(", ")}`);
+      }
+
+      if (response.taskUpdates.length > 0) {
+        await applyTaskUpdates(response.taskUpdates);
+        console.log(`Tasks updated: ${response.taskUpdates.map((u) => `${u.action} ${u.project}:${u.task}`).join(", ")}`);
       }
 
       await appendHot(`User: ${userMessage.slice(0, 200)}`);

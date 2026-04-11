@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
 import { WikiUpdate, readWikiPage } from "./wiki";
+import { TaskUpdate } from "./planner";
 // fs/path still used for WIKI.md
 
 const client = new Anthropic();
@@ -13,6 +14,7 @@ const WIKI_RULES = fs.existsSync(path.join(process.cwd(), "WIKI.md"))
 export interface ClaudeResponse {
   reply: string;
   wikiUpdates: WikiUpdate[];
+  taskUpdates: TaskUpdate[];
 }
 
 function buildSystemPrompt(hotContext: string, wikiSummary: string): string {
@@ -42,8 +44,23 @@ You MUST respond with valid JSON only. No text outside the JSON.
       "path": "entities/some-topic.md",
       "content": "---\\ntitle: Some Topic\\nupdated: YYYY-MM-DD\\ntags: [tag1, tag2]\\n---\\n\\nContent here with [[wikilinks]] to related pages."
     }
+  ],
+  "task_updates": [
+    { "action": "add", "date": "today", "project": "INV", "task": "get task from manager", "points": 1 },
+    { "action": "complete", "date": "today", "project": "INV", "task": "get task" },
+    { "action": "remove", "date": "today", "project": "INV", "task": "get task" }
   ]
 }
+
+Rules for task_updates:
+- Use when the user mentions tasks, plans, todos, or completing work
+- "date" can be "today", "tomorrow", or "YYYY-MM-DD"
+- "project" is an uppercase short name (INV, REM, KB, etc.)
+- "action": "add" creates a new task, "complete" marks it done, "remove" deletes it
+- "points" defaults to 1, only set for "add" action
+- When user says "завтра надо сделать X, Y, Z" → add tasks with date "tomorrow"
+- When user says "сделал X" or "завершил X" → complete that task
+- Return empty task_updates array [] when no task changes needed
 
 Rules for wiki_updates:
 - Use "entities/" for people, tools, projects, organizations
@@ -99,7 +116,7 @@ function parseResponse(text: string): ClaudeResponse {
 
     const jsonMatch = stripped.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return { reply: text, wikiUpdates: [] };
+      return { reply: text, wikiUpdates: [], taskUpdates: [] };
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
@@ -110,8 +127,17 @@ function parseResponse(text: string): ClaudeResponse {
         content: u.content,
       })
     );
+    const taskUpdates: TaskUpdate[] = (parsed.task_updates || []).map(
+      (u: { action: string; date: string; project: string; task: string; points?: number }) => ({
+        action: u.action as "add" | "complete" | "remove",
+        date: u.date,
+        project: u.project,
+        task: u.task,
+        points: u.points,
+      })
+    );
 
-    return { reply, wikiUpdates };
+    return { reply, wikiUpdates, taskUpdates };
   } catch (err) {
     console.error("JSON parse failed, extracting reply field:", err);
 
@@ -122,9 +148,9 @@ function parseResponse(text: string): ClaudeResponse {
         .replace(/\\n/g, "\n")
         .replace(/\\"/g, '"')
         .replace(/\\\\/g, "\\");
-      return { reply, wikiUpdates: [] };
+      return { reply, wikiUpdates: [], taskUpdates: [] };
     }
 
-    return { reply: "Sorry, I had trouble processing that. Please try again.", wikiUpdates: [] };
+    return { reply: "Sorry, I had trouble processing that. Please try again.", wikiUpdates: [], taskUpdates: [] };
   }
 }

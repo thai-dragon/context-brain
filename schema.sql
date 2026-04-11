@@ -43,3 +43,16 @@ create index if not exists wiki_pages_embedding_idx
   on wiki_pages
   using ivfflat (embedding vector_cosine_ops)
   with (lists = 100);
+
+-- Daily planner: task tracking with points
+create table if not exists daily_tasks (
+  id          serial primary key,
+  date        date not null,
+  project     text not null,
+  task        text not null,
+  done        boolean not null default false,
+  points      int not null default 1,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists daily_tasks_date_idx on daily_tasks (date);
