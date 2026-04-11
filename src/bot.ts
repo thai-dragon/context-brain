@@ -151,10 +151,19 @@ export function createBot(token: string): Telegraf {
         await ctx.reply(`Reminder: ${reminder}`);
       }
 
-      const [hotContext, wikiSummary] = await Promise.all([
+      const [hotContext, wikiSummary, todayTasks] = await Promise.all([
         readHot(),
         getWikiSummary(),
+        getTasksForDate("today"),
       ]);
+
+      // Inject today's tasks into hot context so Claude knows actual state
+      const tasksContext = todayTasks.length > 0
+        ? "\n\n[ACTUAL TASKS IN DATABASE FOR TODAY]:\n" +
+          todayTasks.map((t) => `- [${t.done ? "DONE" : "TODO"}] ${t.project}: ${t.task}`).join("\n") +
+          "\nIMPORTANT: Only these tasks exist in the database. Do not reference tasks that are not listed here."
+        : "";
+      const enrichedHot = hotContext + tasksContext;
 
       // Vector search for relevant context; fall back to keyword search
       let relevantPages = await vectorSearch(userMessage, 5);
@@ -169,7 +178,7 @@ export function createBot(token: string): Telegraf {
         relevantPages = [...keywordPages].slice(0, 5);
       }
 
-      const response = await chat(userMessage, hotContext, wikiSummary, relevantPages);
+      const response = await chat(userMessage, enrichedHot, wikiSummary, relevantPages);
 
       if (response.wikiUpdates.length > 0) {
         await applyWikiUpdates(response.wikiUpdates);

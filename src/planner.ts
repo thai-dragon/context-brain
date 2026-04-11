@@ -54,25 +54,36 @@ export async function addTask(
 
 export async function completeTask(date: string, project: string, task: string) {
   const d = resolveDate(date);
-  const p = project.toUpperCase();
 
-  // Try exact match first
-  const { data } = await getSupabase()
+  // Try with project + task match
+  const { data: exact } = await getSupabase()
     .from("daily_tasks")
     .select("id")
     .eq("date", d)
-    .eq("project", p)
+    .eq("project", project.toUpperCase())
     .ilike("task", `%${task}%`)
     .eq("done", false)
     .limit(1);
 
-  if (data && data.length > 0) {
-    await getSupabase()
-      .from("daily_tasks")
-      .update({ done: true })
-      .eq("id", data[0].id);
+  if (exact && exact.length > 0) {
+    await getSupabase().from("daily_tasks").update({ done: true }).eq("id", exact[0].id);
     return true;
   }
+
+  // Fallback: search across all projects for that date
+  const { data: fuzzy } = await getSupabase()
+    .from("daily_tasks")
+    .select("id")
+    .eq("date", d)
+    .ilike("task", `%${task}%`)
+    .eq("done", false)
+    .limit(1);
+
+  if (fuzzy && fuzzy.length > 0) {
+    await getSupabase().from("daily_tasks").update({ done: true }).eq("id", fuzzy[0].id);
+    return true;
+  }
+
   return false;
 }
 
