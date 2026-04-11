@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { WikiUpdate, readWikiPage } from "./wiki";
 import { TaskUpdate } from "./planner";
+import { ReminderUpdate } from "./reminders";
 // fs/path still used for WIKI.md
 
 const client = new Anthropic();
@@ -15,12 +16,15 @@ export interface ClaudeResponse {
   reply: string;
   wikiUpdates: WikiUpdate[];
   taskUpdates: TaskUpdate[];
+  reminderUpdates: ReminderUpdate[];
 }
 
 function buildSystemPrompt(hotContext: string, wikiSummary: string): string {
   return `You are Valera, a personal AI assistant with persistent wiki memory.
 
 You maintain a knowledge wiki stored as markdown files. After every response, you decide what (if anything) to save to the wiki.
+
+Today's date: ${new Date().toISOString().slice(0, 10)}
 
 ## Your Wiki
 
@@ -49,8 +53,17 @@ You MUST respond with valid JSON only. No text outside the JSON.
     { "action": "add", "date": "today", "project": "INV", "task": "get task from manager", "points": 1 },
     { "action": "complete", "date": "today", "project": "INV", "task": "get task" },
     { "action": "remove", "date": "today", "project": "INV", "task": "get task" }
+  ],
+  "reminder_updates": [
+    { "date": "2026-04-23", "message": "Last testosterone dose" }
   ]
 }
+
+Rules for reminder_updates:
+- Use when user says "напомни", "remind me", "не забыть" + a specific date
+- "date" MUST be YYYY-MM-DD format (not "today" or "tomorrow" — convert to actual date)
+- Today's date is provided in the session context
+- Return empty reminder_updates array [] when no reminders needed
 
 Rules for task_updates:
 - Use when the user mentions tasks, plans, todos, or completing work
@@ -118,7 +131,7 @@ function parseResponse(text: string): ClaudeResponse {
 
     const jsonMatch = stripped.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return { reply: text, wikiUpdates: [], taskUpdates: [] };
+      return { reply: text, wikiUpdates: [], taskUpdates: [], reminderUpdates: [] };
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
@@ -138,8 +151,14 @@ function parseResponse(text: string): ClaudeResponse {
         points: u.points,
       })
     );
+    const reminderUpdates: ReminderUpdate[] = (parsed.reminder_updates || []).map(
+      (u: { date: string; message: string }) => ({
+        date: u.date,
+        message: u.message,
+      })
+    );
 
-    return { reply, wikiUpdates, taskUpdates };
+    return { reply, wikiUpdates, taskUpdates, reminderUpdates };
   } catch (err) {
     console.error("JSON parse failed, extracting reply field:", err);
 
@@ -150,9 +169,9 @@ function parseResponse(text: string): ClaudeResponse {
         .replace(/\\n/g, "\n")
         .replace(/\\"/g, '"')
         .replace(/\\\\/g, "\\");
-      return { reply, wikiUpdates: [], taskUpdates: [] };
+      return { reply, wikiUpdates: [], taskUpdates: [], reminderUpdates: [] };
     }
 
-    return { reply: "Sorry, I had trouble processing that. Please try again.", wikiUpdates: [], taskUpdates: [] };
+    return { reply: "Sorry, I had trouble processing that. Please try again.", wikiUpdates: [], taskUpdates: [], reminderUpdates: [] };
   }
 }

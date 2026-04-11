@@ -12,6 +12,7 @@ import { vectorSearch } from "./embeddings";
 import { chat } from "./claude";
 import { transcribeVoice } from "./transcribe";
 import { applyTaskUpdates, getTasksForDate, formatTasks, formatSummary } from "./planner";
+import { applyReminderUpdates, checkReminders } from "./reminders";
 
 const ALLOWED_USERS = (process.env.ALLOWED_TELEGRAM_IDS ?? "")
   .split(",")
@@ -144,6 +145,12 @@ export function createBot(token: string): Telegraf {
     try {
       await ctx.sendChatAction("typing");
 
+      // Check for due reminders
+      const dueReminders = await checkReminders();
+      for (const reminder of dueReminders) {
+        await ctx.reply(`Reminder: ${reminder}`);
+      }
+
       const [hotContext, wikiSummary] = await Promise.all([
         readHot(),
         getWikiSummary(),
@@ -172,6 +179,11 @@ export function createBot(token: string): Telegraf {
       if (response.taskUpdates.length > 0) {
         await applyTaskUpdates(response.taskUpdates);
         console.log(`Tasks updated: ${response.taskUpdates.map((u) => `${u.action} ${u.project}:${u.task}`).join(", ")}`);
+      }
+
+      if (response.reminderUpdates.length > 0) {
+        await applyReminderUpdates(response.reminderUpdates);
+        console.log(`Reminders added: ${response.reminderUpdates.map((r) => `${r.date}: ${r.message}`).join(", ")}`);
       }
 
       await appendHot(`User: ${userMessage.slice(0, 200)}`);
