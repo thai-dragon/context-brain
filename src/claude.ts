@@ -60,6 +60,8 @@ Rules for task_updates:
 - "points" defaults to 1, only set for "add" action
 - When user says "завтра надо сделать X, Y, Z" → add tasks with date "tomorrow"
 - When user says "сделал X" or "завершил X" → complete that task
+- To remove ALL tasks for a date: { "action": "remove", "date": "today", "project": "ALL", "task": "all" }
+- To remove one task: match the task text partially
 - Return empty task_updates array [] when no task changes needed
 
 Rules for wiki_updates:
