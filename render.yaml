@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: tg-valera
+    name: context-brain
     runtime: node
     buildCommand: npm install && npm run build
     startCommand: npm start
@@ -9,11 +9,17 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-haiku-4-5-20251001
+      - key: ALLOWED_TELEGRAM_IDS
+        sync: false
       - key: WEBHOOK_URL
         sync: false
       - key: PORT
         value: "3000"
-    disk:
-      name: wiki-storage
-      mountPath: /opt/render/project/src/wiki
-      sizeGB: 1

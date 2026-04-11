@@ -18,7 +18,7 @@ const ALLOWED_USERS = (process.env.ALLOWED_TELEGRAM_IDS ?? "")
   .filter(Boolean);
 
 function isAllowed(ctx: Context): boolean {
-  if (ALLOWED_USERS.length === 0) return true; // open if not configured
+  if (ALLOWED_USERS.length === 0) return true;
   const userId = ctx.from?.id?.toString();
   return !!userId && ALLOWED_USERS.includes(userId);
 }
@@ -46,21 +46,21 @@ export function createBot(token: string): Telegraf {
     );
   });
 
-  bot.command("memory", (ctx) => {
-    const hot = readHot();
+  bot.command("memory", async (ctx) => {
+    const hot = await readHot();
     const trimmed = hot.length > 4000 ? hot.slice(-4000) + "\n...(truncated)" : hot;
     ctx.reply(trimmed || "No session context yet.");
   });
 
-  bot.command("forget", (ctx) => {
-    clearHot();
+  bot.command("forget", async (ctx) => {
+    await clearHot();
     ctx.reply("Session context cleared.");
   });
 
   bot.command("wiki", async (ctx) => {
     const query = ctx.message.text.replace(/^\/wiki\s*/, "").trim();
     if (!query) {
-      const summary = getWikiSummary();
+      const summary = await getWikiSummary();
       ctx.reply(summary);
       return;
     }
@@ -69,7 +69,7 @@ export function createBot(token: string): Telegraf {
     let results: string[] = await vectorSearch(query, 5);
     const searchType = results.length > 0 ? "semantic" : "keyword";
     if (results.length === 0) {
-      results = searchWiki(query).slice(0, 5);
+      results = (await searchWiki(query)).slice(0, 5);
     }
 
     if (results.length === 0) {
@@ -79,7 +79,7 @@ export function createBot(token: string): Telegraf {
 
     let response = `Found ${results.length} page(s) [${searchType} search]:\n\n`;
     for (const page of results) {
-      const content = readWikiPage(page);
+      const content = await readWikiPage(page);
       const preview = content
         ? content.replace(/---[\s\S]*?---/, "").trim().slice(0, 120)
         : "";
@@ -94,18 +94,15 @@ export function createBot(token: string): Telegraf {
       await ctx.reply("Voice messages require OPENAI_API_KEY to be set.");
       return;
     }
-
     try {
       await ctx.sendChatAction("typing");
       const voice = ctx.message.voice;
       const fileLink = await ctx.telegram.getFileLink(voice.file_id);
       const transcribed = await transcribeVoice(fileLink.href);
-
       if (!transcribed?.trim()) {
         await ctx.reply("Couldn't transcribe the voice message. Try again.");
         return;
       }
-
       await processMessage(ctx, `🎤 ${transcribed}`);
     } catch (err) {
       console.error("Error handling voice message:", err);
@@ -122,8 +119,10 @@ export function createBot(token: string): Telegraf {
     try {
       await ctx.sendChatAction("typing");
 
-      const hotContext = readHot();
-      const wikiSummary = getWikiSummary();
+      const [hotContext, wikiSummary] = await Promise.all([
+        readHot(),
+        getWikiSummary(),
+      ]);
 
       // Vector search for relevant context; fall back to keyword search
       let relevantPages = await vectorSearch(userMessage, 5);
@@ -131,7 +130,7 @@ export function createBot(token: string): Telegraf {
         const words = userMessage.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
         const keywordPages = new Set<string>();
         for (const word of words) {
-          for (const page of searchWiki(word)) {
+          for (const page of await searchWiki(word)) {
             keywordPages.add(page);
           }
         }
@@ -145,8 +144,8 @@ export function createBot(token: string): Telegraf {
         console.log(`Wiki updated: ${response.wikiUpdates.map((u) => u.path).join(", ")}`);
       }
 
-      appendHot(`User: ${userMessage.slice(0, 200)}`);
-      appendHot(`Bot: ${response.reply.slice(0, 200)}`);
+      await appendHot(`User: ${userMessage.slice(0, 200)}`);
+      await appendHot(`Bot: ${response.reply.slice(0, 200)}`);
 
       const reply = response.reply;
       if (reply.length <= 4096) {

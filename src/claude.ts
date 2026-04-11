@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
-import { WikiUpdate } from "./wiki";
+import { WikiUpdate, readWikiPage } from "./wiki";
+// fs/path still used for WIKI.md
 
 const client = new Anthropic();
 
@@ -67,7 +68,8 @@ export async function chat(
   if (relevantPages.length > 0) {
     contextBlock = "\n\n## Relevant wiki pages:\n";
     for (const page of relevantPages) {
-      contextBlock += `\n### ${page}\n${fs.readFileSync(path.join(process.cwd(), "wiki", page), "utf-8")}\n`;
+      const content = await readWikiPage(page);
+      if (content) contextBlock += `\n### ${page}\n${content}\n`;
     }
   }
 

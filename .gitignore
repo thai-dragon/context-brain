@@ -1,3 +1,8 @@
 node_modules/
 dist/
 .env
+wiki/hot.md
+wiki/embeddings.json
+wiki/entities/
+wiki/concepts/
+.claude/
