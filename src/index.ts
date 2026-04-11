@@ -26,6 +26,7 @@ async function start() {
         domain: WEBHOOK_URL,
         path: webhookPath,
         port: PORT,
+        host: "0.0.0.0",
       },
     });
     console.log(`Bot running in webhook mode on port ${PORT}`);
