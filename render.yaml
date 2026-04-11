@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: tg-valera
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: PORT
+        value: "3000"
+    disk:
+      name: wiki-storage
+      mountPath: /opt/render/project/src/wiki
+      sizeGB: 1
