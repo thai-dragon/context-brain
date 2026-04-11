@@ -68,7 +68,7 @@ Rules for reminder_updates:
 Rules for task_updates:
 - Use when the user mentions tasks, plans, todos, or completing work
 - "date" can be "today", "tomorrow", or "YYYY-MM-DD"
-- "project" is an uppercase short name (INV, REM, KB, etc.)
+- "project" is an uppercase short name (INV, REM, KB, etc.). If user doesn't specify a project, use "PERSONAL"
 - "action": "add" creates a new task, "complete" marks it done, "remove" deletes it
 - "points" defaults to 1, only set for "add" action
 - When user says "завтра надо сделать X, Y, Z" → add tasks with date "tomorrow"
