@@ -90,7 +90,13 @@ export async function chat(
 
 function parseResponse(text: string): ClaudeResponse {
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    // Strip markdown code blocks if Claude wrapped JSON in ```json ... ```
+    const stripped = text
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    const jsonMatch = stripped.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return { reply: text, wikiUpdates: [] };
     }
