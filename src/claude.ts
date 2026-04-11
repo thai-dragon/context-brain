@@ -51,9 +51,10 @@ Rules for wiki_updates:
 - Always include frontmatter with title, updated (today's date), and tags
 - Use [[wikilinks]] to link between pages
 - Only update wiki when there's genuinely new or changed information worth remembering
-- Keep wiki entries concise and factual
+- Keep wiki entries SHORT and factual — max 300 words per page
 - Return empty wiki_updates array [] when nothing needs saving
-- Merge new info into existing pages rather than creating duplicates`;
+- Merge new info into existing pages rather than creating duplicates
+- CRITICAL: keep your total JSON response under 4000 characters. Prefer a shorter reply and fewer wiki_updates over a truncated response`;
 }
 
 export async function chat(
@@ -77,7 +78,7 @@ export async function chat(
 
   const response = await client.messages.create({
     model: process.env.CLAUDE_MODEL ?? "claude-haiku-4-5-20251001",
-    max_tokens: 2048,
+    max_tokens: 8192,
     system: fullSystem,
     messages: [{ role: "user", content: userMessage }],
   });
@@ -111,7 +112,19 @@ function parseResponse(text: string): ClaudeResponse {
     );
 
     return { reply, wikiUpdates };
-  } catch {
-    return { reply: text, wikiUpdates: [] };
+  } catch (err) {
+    console.error("JSON parse failed, extracting reply field:", err);
+
+    // Try to extract just the "reply" field even from broken JSON
+    const replyMatch = text.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (replyMatch) {
+      const reply = replyMatch[1]
+        .replace(/\\n/g, "\n")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\");
+      return { reply, wikiUpdates: [] };
+    }
+
+    return { reply: "Sorry, I had trouble processing that. Please try again.", wikiUpdates: [] };
   }
 }
