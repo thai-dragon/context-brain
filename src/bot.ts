@@ -7,11 +7,12 @@ import {
   searchWiki,
   getWikiSummary,
   readWikiPage,
+  writeWikiPage,
 } from "./wiki";
 import { vectorSearch } from "./embeddings";
 import { chat } from "./claude";
 import { transcribeVoice } from "./transcribe";
-import { applyTaskUpdates, getTasksForDate, formatTasks, formatSummary, getRecentDoneTasks } from "./planner";
+import { applyTaskUpdates, getTasksForDate, formatTasks, formatSummary, resolveDate } from "./planner";
 import { applyReminderUpdates, checkReminders } from "./reminders";
 
 const ALLOWED_USERS = (process.env.ALLOWED_TELEGRAM_IDS ?? "")
@@ -151,25 +152,19 @@ export function createBot(token: string): Telegraf {
         await ctx.reply(`Reminder: ${reminder}`);
       }
 
-      const [hotContext, wikiSummary, todayTasks, recentDone] = await Promise.all([
+      const [hotContext, wikiSummary, todayTasks] = await Promise.all([
         readHot(),
         getWikiSummary(),
         getTasksForDate("today"),
-        getRecentDoneTasks(14),
       ]);
 
-      // Inject today's tasks + recent history so Claude knows actual state
+      // Inject today's tasks so Claude knows actual state
       const tasksContext = todayTasks.length > 0
         ? "\n\n[TODAY'S TASKS]:\n" +
           todayTasks.map((t) => `- [${t.done ? "DONE" : "TODO"}] ${t.project}: ${t.task}`).join("\n")
         : "\n\n[TODAY'S TASKS]: none";
 
-      const historyContext = recentDone.length > 0
-        ? "\n\n[COMPLETED TASKS LAST 14 DAYS]:\n" +
-          recentDone.map((t) => `- ${t.date} [DONE] ${t.project}: ${t.task}`).join("\n")
-        : "";
-
-      const enrichedHot = hotContext + tasksContext + historyContext;
+      const enrichedHot = hotContext + tasksContext;
 
       // Vector search for relevant context; fall back to keyword search
       let relevantPages = await vectorSearch(userMessage, 5);
@@ -194,6 +189,20 @@ export function createBot(token: string): Telegraf {
       if (response.taskUpdates.length > 0) {
         await applyTaskUpdates(response.taskUpdates);
         console.log(`Tasks updated: ${response.taskUpdates.map((u) => `${u.action} ${u.project}:${u.task}`).join(", ")}`);
+
+        // Log completed tasks to wiki so history is searchable
+        const completed = response.taskUpdates.filter((u) => u.action === "complete");
+        if (completed.length > 0) {
+          const monthKey = new Date().toISOString().slice(0, 7);
+          const logPath = `log/${monthKey}`;
+          const today = new Date().toISOString().slice(0, 10);
+          const existing = await readWikiPage(logPath)
+            ?? `---\ntitle: Log ${monthKey}\nupdated: ${today}\ntags: [log]\n---\n`;
+          const entries = completed
+            .map((u) => `- ${resolveDate(u.date)} [DONE] ${u.project}: ${u.task}`)
+            .join("\n");
+          await writeWikiPage(logPath, existing.trimEnd() + "\n" + entries);
+        }
       }
 
       if (response.reminderUpdates.length > 0) {

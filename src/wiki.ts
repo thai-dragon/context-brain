@@ -52,7 +52,7 @@ export async function readWikiPage(pagePath: string): Promise<string | null> {
   return data?.content ?? null;
 }
 
-export async function writeWikiPage(pagePath: string, content: string) {
+export async function writeWikiPage(pagePath: string, content: string): Promise<void> {
   const path = normalizePath(pagePath);
   const title = extractTitle(content);
   const tags = extractTags(content);
