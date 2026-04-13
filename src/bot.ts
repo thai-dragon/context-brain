@@ -11,7 +11,7 @@ import {
 import { vectorSearch } from "./embeddings";
 import { chat } from "./claude";
 import { transcribeVoice } from "./transcribe";
-import { applyTaskUpdates, getTasksForDate, formatTasks, formatSummary } from "./planner";
+import { applyTaskUpdates, getTasksForDate, formatTasks, formatSummary, getRecentDoneTasks } from "./planner";
 import { applyReminderUpdates, checkReminders } from "./reminders";
 
 const ALLOWED_USERS = (process.env.ALLOWED_TELEGRAM_IDS ?? "")
@@ -151,19 +151,25 @@ export function createBot(token: string): Telegraf {
         await ctx.reply(`Reminder: ${reminder}`);
       }
 
-      const [hotContext, wikiSummary, todayTasks] = await Promise.all([
+      const [hotContext, wikiSummary, todayTasks, recentDone] = await Promise.all([
         readHot(),
         getWikiSummary(),
         getTasksForDate("today"),
+        getRecentDoneTasks(14),
       ]);
 
-      // Inject today's tasks into hot context so Claude knows actual state
+      // Inject today's tasks + recent history so Claude knows actual state
       const tasksContext = todayTasks.length > 0
-        ? "\n\n[ACTUAL TASKS IN DATABASE FOR TODAY]:\n" +
-          todayTasks.map((t) => `- [${t.done ? "DONE" : "TODO"}] ${t.project}: ${t.task}`).join("\n") +
-          "\nIMPORTANT: Only these tasks exist in the database. Do not reference tasks that are not listed here."
+        ? "\n\n[TODAY'S TASKS]:\n" +
+          todayTasks.map((t) => `- [${t.done ? "DONE" : "TODO"}] ${t.project}: ${t.task}`).join("\n")
+        : "\n\n[TODAY'S TASKS]: none";
+
+      const historyContext = recentDone.length > 0
+        ? "\n\n[COMPLETED TASKS LAST 14 DAYS]:\n" +
+          recentDone.map((t) => `- ${t.date} [DONE] ${t.project}: ${t.task}`).join("\n")
         : "";
-      const enrichedHot = hotContext + tasksContext;
+
+      const enrichedHot = hotContext + tasksContext + historyContext;
 
       // Vector search for relevant context; fall back to keyword search
       let relevantPages = await vectorSearch(userMessage, 5);

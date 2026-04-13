@@ -124,6 +124,21 @@ export async function applyTaskUpdates(updates: TaskUpdate[]) {
   }
 }
 
+export async function getRecentDoneTasks(days = 14): Promise<DailyTask[]> {
+  const from = new Date();
+  from.setDate(from.getDate() - days);
+  const fromStr = from.toISOString().slice(0, 10);
+
+  const { data } = await getSupabase()
+    .from("daily_tasks")
+    .select("*")
+    .gte("date", fromStr)
+    .eq("done", true)
+    .order("date", { ascending: false })
+    .order("project");
+  return (data as DailyTask[]) ?? [];
+}
+
 export async function getTasksForDate(date: string): Promise<DailyTask[]> {
   const d = resolveDate(date);
   const { data } = await getSupabase()
