@@ -10,10 +10,11 @@ import {
   writeWikiPage,
 } from "./wiki";
 import { vectorSearch } from "./embeddings";
-import { chat } from "./claude";
+import { chat, summarizeDay } from "./claude";
 import { transcribeVoice } from "./transcribe";
 import { applyTaskUpdates, getTasksForDate, formatTasks, formatSummary, resolveDate } from "./planner";
 import { applyReminderUpdates, checkReminders } from "./reminders";
+import { saveMessage, getMessagesForDate } from "./messages";
 
 const ALLOWED_USERS = (process.env.ALLOWED_TELEGRAM_IDS ?? "")
   .split(",")
@@ -48,7 +49,8 @@ export function createBot(token: string): Telegraf {
         "/summary - end of day summary\n" +
         "/memory - session context\n" +
         "/forget - clear session\n" +
-        "/wiki <query> - search wiki"
+        "/wiki <query> - search wiki\n" +
+        "/log DD/MM/YYYY - tasks + summary for a day"
     );
   });
 
@@ -82,6 +84,34 @@ export function createBot(token: string): Telegraf {
     const date = dateArg || new Date().toISOString().slice(0, 10);
     const tasks = await getTasksForDate(dateArg || "today");
     await ctx.reply(formatSummary(tasks, date));
+  });
+
+  bot.command("log", async (ctx) => {
+    const arg = ctx.message.text.replace(/^\/log\s*/, "").trim();
+    if (!arg) {
+      ctx.reply("Usage: /log DD/MM/YYYY");
+      return;
+    }
+
+    // Parse DD/MM/YYYY → YYYY-MM-DD
+    const match = arg.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) {
+      ctx.reply("Формат: /log DD/MM/YYYY");
+      return;
+    }
+    const date = `${match[3]}-${match[2]}-${match[1]}`;
+
+    await ctx.sendChatAction("typing");
+
+    const [messages, tasks] = await Promise.all([
+      getMessagesForDate(date),
+      getTasksForDate(date),
+    ]);
+
+    const taskLines = formatTasks(tasks, date);
+    const summary = await summarizeDay(date, messages, tasks);
+
+    await ctx.reply(`${taskLines}\n\n---\n\n${summary}`);
   });
 
   bot.command("wiki", async (ctx) => {
@@ -210,8 +240,12 @@ export function createBot(token: string): Telegraf {
         console.log(`Reminders added: ${response.reminderUpdates.map((r) => `${r.date}: ${r.message}`).join(", ")}`);
       }
 
-      await appendHot(`User: ${userMessage.slice(0, 200)}`);
-      await appendHot(`Bot: ${response.reply.slice(0, 200)}`);
+      await Promise.all([
+        appendHot(`User: ${userMessage.slice(0, 200)}`),
+        appendHot(`Bot: ${response.reply.slice(0, 200)}`),
+        saveMessage("user", userMessage),
+        saveMessage("assistant", response.reply),
+      ]);
 
       const reply = response.reply;
       if (reply.length <= 4096) {

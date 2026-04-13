@@ -121,6 +121,43 @@ export async function chat(
   return parseResponse(text);
 }
 
+export async function summarizeDay(
+  date: string,
+  messages: { role: string; text: string }[],
+  tasks: { done: boolean; project: string; task: string }[]
+): Promise<string> {
+  if (messages.length === 0) return `Нет сообщений за ${date}.`;
+
+  const transcript = messages
+    .map((m) => `[${m.role === "user" ? "Ты" : "Valera"}]: ${m.text}`)
+    .join("\n");
+
+  const taskList =
+    tasks.length > 0
+      ? tasks
+          .map((t) => `- [${t.done ? "DONE" : "TODO"}] ${t.project}: ${t.task}`)
+          .join("\n")
+      : "Нет задач";
+
+  const prompt = `Дата: ${date}
+
+Задачи:
+${taskList}
+
+Переписка:
+${transcript}
+
+Напиши краткое summary этого дня — что обсуждалось, какие решения были приняты. Только факты из переписки, без домыслов. Отвечай на языке переписки.`;
+
+  const response = await client.messages.create({
+    model: process.env.CLAUDE_MODEL ?? "claude-haiku-4-5-20251001",
+    max_tokens: 1024,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  return response.content[0].type === "text" ? response.content[0].text : "";
+}
+
 function parseResponse(text: string): ClaudeResponse {
   try {
     // Strip markdown code blocks if Claude wrapped JSON in ```json ... ```

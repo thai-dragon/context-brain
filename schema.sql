@@ -56,3 +56,23 @@ create table if not exists daily_tasks (
 );
 
 create index if not exists daily_tasks_date_idx on daily_tasks (date);
+
+-- Reminders
+create table if not exists reminders (
+  id          serial primary key,
+  date        date not null,
+  message     text not null,
+  sent        boolean not null default false,
+  created_at  timestamptz not null default now()
+);
+
+-- Message history: every user/bot message with date for /log
+create table if not exists messages (
+  id          bigserial primary key,
+  created_at  timestamptz not null default now(),
+  date        date not null,
+  role        text not null check (role in ('user', 'assistant')),
+  text        text not null
+);
+
+create index if not exists messages_date_idx on messages (date);
