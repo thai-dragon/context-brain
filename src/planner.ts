@@ -90,12 +90,15 @@ export async function completeTask(date: string, project: string, task: string) 
 export async function removeTask(date: string, project: string, task: string) {
   const d = resolveDate(date);
 
-  // "all" or "*" removes everything for that date
-  if (task === "all" || task === "*" || project === "ALL") {
-    await getSupabase()
-      .from("daily_tasks")
-      .delete()
-      .eq("date", d);
+  // Remove all tasks for date (all projects)
+  if (project === "ALL") {
+    await getSupabase().from("daily_tasks").delete().eq("date", d);
+    return;
+  }
+
+  // Remove all tasks for a specific project
+  if (task === "all" || task === "*") {
+    await getSupabase().from("daily_tasks").delete().eq("date", d).eq("project", project.toUpperCase());
     return;
   }
 
