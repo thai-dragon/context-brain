@@ -21,3 +21,13 @@ export async function getMessagesForDate(date: string): Promise<Message[]> {
     .order("created_at", { ascending: true });
   return (data as Message[]) ?? [];
 }
+
+export async function getMessagesBetween(fromDate: string, toDate: string): Promise<Message[]> {
+  const { data } = await getSupabase()
+    .from("messages")
+    .select("*")
+    .gte("date", fromDate)
+    .lte("date", toDate)
+    .order("created_at", { ascending: true });
+  return (data as Message[]) ?? [];
+}
